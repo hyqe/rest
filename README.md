@@ -12,16 +12,19 @@ type Message struct {
 	Body string
 }
 
-rest.Start(":8080",
-	rest.NewRoute(
+routes := []rest.Route{
+    rest.NewRoute(
 		func(r rest.Request) rest.Response {
-			return rest.JSON(&Message{
-				ID:   r.Vars()["id"],
-				Body: "Hello",
-			})
+			msg := &Message{
+				Body: "Hi!",
+			}
+			r.Vars(&msg)
+			return rest.JSON(&msg)
 		},
 		rest.WithMethod("GET"),
 		rest.WithPath("/messages/{id}"),
 	),
-)
+}
+
+rest.Start(":8080", routes...)
 ```

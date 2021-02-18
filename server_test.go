@@ -12,7 +12,7 @@ func Example() {
 		Body string
 	}
 
-	rest.Start(":8080",
+	routes := []rest.Route{
 		rest.NewRoute(
 			func(r rest.Request) rest.Response {
 				msg := &Message{
@@ -24,5 +24,7 @@ func Example() {
 			rest.WithMethod("GET"),
 			rest.WithPath("/messages/{id}"),
 		),
-	)
+	}
+
+	rest.Start(":8080", routes...)
 }
