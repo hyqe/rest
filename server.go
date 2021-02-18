@@ -63,7 +63,7 @@ func JSON(v interface{}) Response {
 // Request ...
 type Request interface {
 	Base() *http.Request
-	Vars() map[string]string
+	Vars(interface{})
 }
 
 // Handler ...
