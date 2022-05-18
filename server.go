@@ -2,135 +2,105 @@ package rest
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	"os"
+	"time"
+
+	"context"
 )
 
-// Start a REST API
-func Start(addr string, routes ...Route) error {
-	return http.ListenAndServe(addr, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		var req Request
-		for _, route := range routes {
-			if _, ok := route.Match(req); ok {
-				resp := route.Handler(req)
-				if resp != nil {
-					for k, v := range resp.Headers() {
-						rw.Header().Set(k, v)
-					}
-					rw.WriteHeader(resp.Status())
-					fmt.Fprint(rw, resp.Body())
-				}
-				break
-			}
-		}
-	}))
+func Runf(handler http.HandlerFunc, opts ...SeverOption) error {
+	return Run(handler, opts...)
 }
 
-// Response ...
-type Response interface {
-	Status() int
-	Body() []byte
-	Headers() map[string]string
+func Run(handler http.Handler, opts ...SeverOption) error {
+	return NewServer().
+		Apply(defaultServerOptions()...).
+		Apply(WithHandler(handler)).
+		Apply(opts...).
+		Run()
 }
 
-// NewResponse ..
-func NewResponse(opts ...ResponseOption) Response {
-	return nil
+type Server struct {
+	ip         string
+	port       int
+	handler    http.Handler
+	purge      time.Duration
+	interrupts []os.Signal
 }
 
-// ResponseOption ..
-type ResponseOption func(r Response)
+func NewServer() *Server {
+	return &Server{}
+}
 
-// SetBody ..
-func SetBody(b io.Reader) ResponseOption {
-	return func(r Response) {
-
+func defaultServerOptions() []SeverOption {
+	return []SeverOption{
+		WithPort(8080),
+		WithPurge(time.Second * 3),
+		WithInterrupts(defaultInterruptSignals...),
+		WithHandler(NewStatusNotImplementedHandler()),
 	}
 }
 
-// WithJSON ..
-func WithJSON(v interface{}) ResponseOption {
-	return func(r Response) {
-
-	}
-}
-
-// JSON ...
-func JSON(v interface{}) Response {
-	return nil
-}
-
-// Request ...
-type Request interface {
-	Base() *http.Request
-	Vars(interface{})
-}
-
-// Handler ...
-type Handler func(Request) Response
-
-// Route ..
-type Route struct {
-	Handler
-	Matches
-}
-
-// NewRoute ..
-func NewRoute(h Handler, m ...MatchOption) Route {
-	return Route{
-		Handler: h,
-		Matches: m,
-	}
-}
-
-// MatchOption ...
-type MatchOption func(r Request) (vars map[string]string, ok bool)
-
-// Matches ...
-type Matches []MatchOption
-
-// Match ..
-func (opts Matches) Match(r Request) (vars map[string]string, ok bool) {
-	return Match(r)
-}
-
-// Match ...
-func Match(r Request, opts ...MatchOption) (vars map[string]string, ok bool) {
-	vars = make(map[string]string)
+func (s *Server) Apply(opts ...SeverOption) *Server {
 	for _, opt := range opts {
-		res, ok := opt(r)
-		if !ok {
-			return nil, false
-		}
-		for k, v := range res {
-			vars[k] = v
-		}
+		opt(s)
 	}
-	return vars, true
+	return s
 }
 
-// WithPath ...
-func WithPath(path string) MatchOption {
-	return func(r Request) (vars map[string]string, ok bool) {
-		return nil, false
+func (s *Server) Addr() string {
+	return fmt.Sprintf("%v:%v", s.ip, s.port)
+}
+
+func (s *Server) Handler() http.Handler {
+	return s.handler
+}
+
+func (s *Server) Run() error {
+	httpSrv := http.Server{
+		Addr:    s.Addr(),
+		Handler: s.Handler(),
+	}
+
+	go func() {
+		<-Interrupt(s.interrupts...)
+		ctx, cancel := context.WithTimeout(context.Background(), s.purge)
+		defer cancel()
+		httpSrv.Shutdown(ctx)
+	}()
+
+	return httpSrv.ListenAndServe()
+}
+
+type SeverOption func(*Server)
+
+func WithIP(ip string) SeverOption {
+	return func(s *Server) {
+		s.ip = ip
 	}
 }
 
-// WithMethod ..
-func WithMethod(method string) MatchOption {
-	return func(r Request) (vars map[string]string, ok bool) {
-		return nil, false
+func WithPort(port int) SeverOption {
+	return func(s *Server) {
+		s.port = port
 	}
 }
 
-// WithContentType ...
-func WithContentType(typ string) MatchOption {
-	return func(r Request) (vars map[string]string, ok bool) {
-		return nil, false
+func WithHandler(h http.Handler) SeverOption {
+	return func(s *Server) {
+		s.handler = h
 	}
 }
 
-// WithContentJSON ..
-func WithContentJSON() MatchOption {
-	return WithContentType(ContentJSON)
+func WithPurge(d time.Duration) SeverOption {
+	return func(s *Server) {
+		s.purge = d
+	}
+}
+
+func WithInterrupts(sig ...os.Signal) SeverOption {
+	return func(s *Server) {
+		s.interrupts = sig
+	}
 }
