@@ -1,11 +1,6 @@
 package rest
 
 const (
-	// HeaderContentType is the standard content type header
-	HeaderContentType = `Content-Type`
-)
-
-const (
 	// ContentJSON is the standard json content type
 	ContentJSON = `application/json`
 

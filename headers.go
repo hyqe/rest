@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	// HeaderContentType is the standard content type header
+	HeaderContentType = `Content-Type`
+)
+
 var reBearToken = regexp.MustCompile("^[Bb]earer (.+)$")
 
 func ParseBearerToken(r *http.Request) (string, error) {
