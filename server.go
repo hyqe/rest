@@ -27,6 +27,8 @@ type Server struct {
 	handler    http.Handler
 	purge      time.Duration
 	interrupts []os.Signal
+	cert       string
+	key        string
 }
 
 func NewServer() *Server {
@@ -57,6 +59,13 @@ func (s *Server) Handler() http.Handler {
 	return s.handler
 }
 
+func (s *Server) SecureKeys() (cert, key string, ok bool) {
+	if s.cert != "" && s.key != "" {
+		return s.cert, s.key, true
+	}
+	return cert, key, false
+}
+
 func (s *Server) Run() error {
 	httpSrv := http.Server{
 		Addr:    s.Addr(),
@@ -70,7 +79,11 @@ func (s *Server) Run() error {
 		httpSrv.Shutdown(ctx)
 	}()
 
-	return httpSrv.ListenAndServe()
+	if cert, key, ok := s.SecureKeys(); ok {
+		return httpSrv.ListenAndServeTLS(cert, key)
+	} else {
+		return httpSrv.ListenAndServe()
+	}
 }
 
 type SeverOption func(*Server)
@@ -102,5 +115,12 @@ func WithPurge(d time.Duration) SeverOption {
 func WithInterrupts(sig ...os.Signal) SeverOption {
 	return func(s *Server) {
 		s.interrupts = sig
+	}
+}
+
+func WithTLS(cert, key string) SeverOption {
+	return func(s *Server) {
+		s.cert = cert
+		s.key = key
 	}
 }
